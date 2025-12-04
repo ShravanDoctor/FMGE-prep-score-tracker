@@ -1,0 +1,485 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FMGE Simple Score Tracker</title>
+    <style>
+        /* --- CSS Styling --- */
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; background-color: #f4f7f9; color: #333; }
+        .container { max-width: 1200px; margin: auto; }
+        header { background-color: #007bff; color: white; padding: 20px; border-radius: 8px 8px 0 0; margin-bottom: 20px; text-align: center; }
+        header h1 { margin: 0; }
+        section { background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        h2 { color: #007bff; border-bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 20px; }
+        input[type="text"], input[type="number"], input[type="password"], input[type="date"], select { width: 100%; padding: 10px; margin: 8px 0 16px 0; display: inline-block; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        button { background-color: #28a745; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; margin-top: 10px; }
+        button:hover { background-color: #1e7e34; }
+        .delete-btn { background-color: #dc3545; padding: 5px 8px; font-size: 12px; margin: 0; }
+        .delete-btn:hover { background-color: #c82333; }
+        .admin-area { border: 2px solid #ffc107; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+        .dashboard-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        .dashboard-table th, .dashboard-table td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        .dashboard-table th { background-color: #f2f2f2; color: #333; }
+        .editable[contenteditable="true"] { background-color: #fffacd; border: 1px dashed #ffa500; cursor: text; }
+        .percentage { font-weight: bold; color: #dc3545; }
+        .percentile { font-weight: bold; color: #007bff; }
+        /* Weekly Chart Styling */
+        .chart-container { margin-top: 15px; padding: 10px; border: 1px solid #ccc; border-radius: 4px; margin-bottom: 20px; }
+        .chart-person-title { color: #0056b3; margin-top: 0; border-bottom: 1px dashed #eee; padding-bottom: 5px; }
+        #weekly-improvement-chart ul { list-style-type: none; padding: 0; margin-bottom: 20px;}
+        #weekly-improvement-chart li { margin-bottom: 15px; }
+        .chart-bar { height: 20px; background-color: #28a745; text-align: center; color: white; line-height: 20px; border-radius: 4px; transition: width 0.5s; }
+        .chart-label { display: inline-block; width: 120px; font-weight: bold; }
+        .result-comparison { margin-top: 15px; padding: 10px; border: 1px solid #007bff; background-color: #e6f2ff; border-radius: 4px; }
+        .result-comparison strong { color: #0056b3; }
+        .filter-control { max-width: 300px; margin-bottom: 20px; display: none; } /* HIDDEN BY DEFAULT */
+        .user-login-area { background-color: #e9f2f9; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🩺 FMGE Custom Module Tracker</h1>
+            <p>Score Tracking powered by Local Storage (Saved to your browser)</p>
+        </header>
+
+        <section class="user-login-area" id="user-login-section">
+            <h2>🔑 View Your Scores</h2>
+            <p>Enter your name to view your personalized progress report.</p>
+            <input type="text" id="viewer-name-input" placeholder="Enter Your Name (e.g., John)">
+            <button onclick="checkUserLogin()">View My Scores</button>
+        </section>
+
+        <section id="admin-section" class="admin-area">
+            <h2>🔐 Score Entry (Admin Only)</h2>
+            <div id="admin-login">
+                <p>Enter the admin password to unlock score entry, editing, and deletion.</p>
+                <input type="password" id="admin-password" placeholder="Your Secret Password">
+                <button onclick="checkAdminPassword()">Unlock Admin</button>
+            </div>
+
+            <div id="score-form" style="display: none;">
+                <form id="add-score-form">
+                    <label for="person">Name (Yourself or a Friend):</label>
+                    <input type="text" id="person" name="person" required>
+                    
+                    <label for="date-recorded">Date of Test (Editable):</label>
+                    <input type="date" id="date-recorded" name="date_recorded" required>
+
+                    <label for="subject">Subject (e.g., Anatomy, Pathology):</label>
+                    <input type="text" id="subject" name="subject" required>
+
+                    <label for="module-name">Module Name (Marrow/Cerebellum + Topic):</label>
+                    <input type="text" id="module-name" name="module_name" required>
+
+                    <label for="score-obtained">Score Obtained (Marks):</label>
+                    <input type="number" id="score-obtained" name="score_obtained" min="0" required>
+
+                    <label for="total-questions">Total Questions:</label>
+                    <input type="number" id="total-questions" name="total_questions" min="1" required>
+
+                    <button type="submit">Submit Score and Compare</button>
+                </form>
+                <div id="submission-feedback" class="result-comparison" style="display: none;"></div>
+            </div>
+        </section>
+
+        <section id="dashboard-section" style="display: none;">
+            
+            <div class="filter-control" id="filter-container">
+                <label for="person-filter">Select User to View Scores:</label>
+                <select id="person-filter" onchange="renderDashboard()">
+                    </select>
+            </div>
+
+            <h2>📈 Individual Weekly Improvement</h2>
+            <div id="weekly-improvement-chart">
+                </div>
+            
+            <h2>📝 Recorded Scores (<span id="view-title"></span>)</h2>
+            <table class="dashboard-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Person</th>
+                        <th>Subject</th>
+                        <th>Module Name</th>
+                        <th>Score (Marks/Total)</th>
+                        <th>Percentage</th>
+                        <th>Percentile</th> 
+                        <th id="admin-column" style="width: 80px;"></th>
+                    </tr>
+                </thead>
+                <tbody id="scores-table-body">
+                    </tbody>
+            </table>
+            <p id="no-scores-message" style="display: none;">No scores have been recorded yet. Enter a score above!</p>
+        </section>
+    </div>
+
+    <script>
+        const ADMIN_PASSWORD = "Shravan567@#$"; // <--- **CHANGE THIS PASSWORD**
+        const STORAGE_KEY = 'fmgeScores';
+        let isAdmin = false; 
+        let currentFilter = 'ALL'; // Tracks the name currently viewing the dashboard
+
+        // --- Data Handling ---
+
+        function loadScores() {
+            const scoresJson = localStorage.getItem(STORAGE_KEY);
+            return scoresJson ? JSON.parse(scoresJson) : [];
+        }
+
+        function saveScores(scores) {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(scores));
+        }
+        
+        function generateId() {
+            return Date.now().toString(36) + Math.random().toString(36).substr(2);
+        }
+
+        // --- Core Calculation ---
+
+        function calculatePercentile(targetPercentage, scoresList) {
+            if (scoresList.length === 0) return '100.00'; 
+            
+            const allPercentages = scoresList.map(s => (s.scoreObtained / s.totalQuestions) * 100);
+            const totalScores = scoresList.length; 
+            let scoresBelowOrEqual = 0;
+            
+            allPercentages.forEach(existingPerc => {
+                if (targetPercentage >= existingPerc) {
+                    scoresBelowOrEqual++;
+                }
+            });
+            
+            const percentile = (scoresBelowOrEqual / totalScores) * 100;
+            return percentile.toFixed(2);
+        }
+        
+        // --- Deletion Logic (Admin Only) ---
+        
+        window.deleteScore = function(id) {
+            if (!isAdmin || !confirm('Are you sure you want to delete this score? This action cannot be undone.')) {
+                return;
+            }
+            
+            let scores = loadScores();
+            scores = scores.filter(score => score.id !== id);
+            saveScores(scores);
+            renderDashboard();
+            document.getElementById('submission-feedback').style.display = 'none';
+        }
+
+        // --- Editing Logic (Admin Only) ---
+
+        window.updateScore = function(event, scoreId, field) {
+            if (!isAdmin) return;
+
+            let newValue = event.target.textContent.trim();
+            let scores = loadScores();
+            const scoreIndex = scores.findIndex(s => s.id === scoreId);
+
+            if (scoreIndex === -1) return;
+
+            if (field === 'scoreObtained' || field === 'totalQuestions') {
+                newValue = parseInt(newValue);
+                if (isNaN(newValue) || newValue < 0) {
+                    alert('Score and Total Questions must be non-negative numbers.');
+                    renderDashboard(); 
+                    return;
+                }
+            } else if (field === 'dateRecorded') {
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(newValue)) {
+                     alert('Date must be in YYYY-MM-DD format (e.g., 2025-01-30).');
+                     renderDashboard(); 
+                     return;
+                }
+            }
+
+            scores[scoreIndex][field] = newValue;
+
+            if (scores[scoreIndex]['scoreObtained'] > scores[scoreIndex]['totalQuestions']) {
+                 alert('Error: Score cannot be higher than total questions.');
+                 renderDashboard(); 
+                 return;
+            }
+
+            saveScores(scores);
+            renderDashboard();
+            document.getElementById('submission-feedback').style.display = 'none';
+        }
+
+        // --- Rendering ---
+        
+        function populatePersonFilter(allScores) {
+            const filterElement = document.getElementById('person-filter');
+            const currentSelected = filterElement.value;
+            filterElement.innerHTML = ''; 
+
+            const people = [...new Set(allScores.map(s => s.person))].sort();
+            
+            const allOption = document.createElement('option');
+            allOption.value = 'ALL';
+            allOption.textContent = 'All Users (Admin View)';
+            filterElement.appendChild(allOption);
+
+            people.forEach(person => {
+                const option = document.createElement('option');
+                option.value = person;
+                option.textContent = person;
+                filterElement.appendChild(option);
+            });
+            
+            filterElement.value = currentSelected || 'ALL';
+        }
+
+        function renderDashboard() {
+            const allScores = loadScores();
+            
+            // If the user is the admin, populate and show the filter dropdown
+            if (isAdmin) {
+                 populatePersonFilter(allScores);
+                 document.getElementById('filter-container').style.display = 'block';
+                 currentFilter = document.getElementById('person-filter').value;
+            } else {
+                 // For viewers, hide the filter and rely on the name they entered earlier
+                 document.getElementById('filter-container').style.display = 'none';
+            }
+            
+            let scoresToDisplay;
+            let viewTitle;
+
+            if (currentFilter === 'ALL') {
+                scoresToDisplay = allScores;
+                viewTitle = 'All Users';
+            } else {
+                scoresToDisplay = allScores.filter(score => score.person.toLowerCase() === currentFilter.toLowerCase());
+                viewTitle = currentFilter + "'s Scores";
+            }
+            
+            document.getElementById('view-title').textContent = viewTitle;
+            document.getElementById('dashboard-section').style.display = 'block'; // Show the dashboard container
+
+            const tableBody = document.getElementById('scores-table-body');
+            const noScoresMessage = document.getElementById('no-scores-message');
+            const adminColHeader = document.getElementById('admin-column');
+            
+            tableBody.innerHTML = ''; 
+            adminColHeader.textContent = isAdmin ? 'Actions' : '';
+            
+            if (allScores.length === 0) { 
+                noScoresMessage.style.display = 'block';
+                document.getElementById('weekly-improvement-chart').innerHTML = '<p>No scores yet. Please ask the Admin to submit one.</p>';
+                return;
+            } else {
+                noScoresMessage.style.display = 'none';
+            }
+            
+            // --- Render Tables ---
+            scoresToDisplay.sort((a, b) => new Date(b.dateRecorded) - new Date(a.dateRecorded)); 
+            
+            const scoresComparisonPool = allScores; // Percentile is always against ALL scores
+            
+            if (scoresToDisplay.length === 0) {
+                 tableBody.innerHTML = '<tr><td colspan="8">No scores found for ' + viewTitle + '.</td></tr>';
+                 renderWeeklyImprovement(scoresToDisplay); // Render empty chart
+                 return;
+            }
+
+            scoresToDisplay.forEach(score => {
+                const percentage = ((score.scoreObtained / score.totalQuestions) * 100).toFixed(2);
+                const percentile = calculatePercentile(parseFloat(percentage), scoresComparisonPool);
+                
+                const row = tableBody.insertRow();
+                
+                let deleteCell = '';
+                if (isAdmin) {
+                    deleteCell = `<td><button class="delete-btn" onclick="deleteScore('${score.id}')">Delete</button></td>`;
+                } else {
+                    deleteCell = '<td></td>';
+                }
+
+                // Make cells editable only if Admin is logged in
+                const editableAttr = isAdmin ? 'contenteditable="true" class="editable"' : 'class="non-editable"';
+                const dateDisplay = score.dateRecorded; 
+                
+                row.innerHTML = `
+                    <td ${editableAttr} data-field="dateRecorded" onblur="updateScore(event, '${score.id}', 'dateRecorded')" onkeydown="if(event.key === 'Enter') { event.preventDefault(); this.blur(); }">${dateDisplay}</td>
+                    <td ${editableAttr} data-field="person" onblur="updateScore(event, '${score.id}', 'person')" onkeydown="if(event.key === 'Enter') { event.preventDefault(); this.blur(); }">${score.person}</td>
+                    <td ${editableAttr} data-field="subject" onblur="updateScore(event, '${score.id}', 'subject')" onkeydown="if(event.key === 'Enter') { event.preventDefault(); this.blur(); }">${score.subject}</td>
+                    <td ${editableAttr} data-field="moduleName" onblur="updateScore(event, '${score.id}', 'moduleName')" onkeydown="if(event.key === 'Enter') { event.preventDefault(); this.blur(); }">${score.moduleName}</td>
+                    <td>
+                        <span ${editableAttr} data-field="scoreObtained" onblur="updateScore(event, '${score.id}', 'scoreObtained')" onkeydown="if(event.key === 'Enter') { event.preventDefault(); this.blur(); }">${score.scoreObtained}</span>/
+                        <span ${editableAttr} data-field="totalQuestions" onblur="updateScore(event, '${score.id}', 'totalQuestions')" onkeydown="if(event.key === 'Enter') { event.preventDefault(); this.blur(); }">${score.totalQuestions}</span>
+                    </td>
+                    <td class="percentage">${percentage}%</td>
+                    <td class="percentile">${percentile}</td>
+                    ${deleteCell}
+                `;
+            });
+
+            // --- Render Charts ---
+            renderWeeklyImprovement(scoresToDisplay);
+        }
+
+        function renderWeeklyImprovement(scoresToChart) {
+            const chartArea = document.getElementById('weekly-improvement-chart');
+            chartArea.innerHTML = '';
+            
+            const people = [...new Set(scoresToChart.map(s => s.person))];
+
+            if (people.length === 0) {
+                chartArea.innerHTML = '<p>No scores available for the selected user/group for weekly tracking.</p>';
+                return;
+            }
+
+            people.forEach(person => {
+                const personScores = scoresToChart.filter(s => s.person === person);
+                
+                if (personScores.length === 0) return;
+
+                const weeklyData = {};
+
+                personScores.forEach(score => {
+                    const date = new Date(score.dateRecorded);
+                    const day = date.getDay(); 
+                    const diff = date.getDate() - day + (day === 0 ? -6 : 1); 
+                    const weekStart = new Date(date.setDate(diff));
+                    weekStart.setHours(0, 0, 0, 0);
+                    const weekKey = weekStart.toISOString().split('T')[0]; 
+                    
+                    const percentage = (score.scoreObtained / score.totalQuestions) * 100;
+
+                    if (!weeklyData[weekKey]) {
+                        weeklyData[weekKey] = { total: 0, count: 0 };
+                    }
+                    weeklyData[weekKey].total += percentage;
+                    weeklyData[weekKey].count++;
+                });
+
+                const weeklyAverages = [];
+                for (const key in weeklyData) {
+                    const avg = weeklyData[key].total / weeklyData[key].count;
+                    weeklyAverages.push({ week: key, average: avg });
+                }
+
+                weeklyAverages.sort((a, b) => new Date(a.week) - new Date(b.week));
+                
+                let chartHTML = `<div class="chart-container">`;
+                chartHTML += `<h4 class="chart-person-title">Progress for: ${person}</h4>`;
+                chartHTML += '<ul>';
+
+                weeklyAverages.forEach(data => {
+                    const avg = data.average.toFixed(2);
+                    const barWidth = Math.min(avg, 100); 
+                    chartHTML += `
+                        <li>
+                            <span class="chart-label">${data.week}</span>
+                            <div class="chart-bar" style="width: ${barWidth}%;">${avg}%</div>
+                        </li>`;
+                });
+                chartHTML += '</ul></div>';
+                
+                chartArea.innerHTML += chartHTML;
+            });
+        }
+
+
+        // --- Login Logic ---
+
+        window.checkUserLogin = function() {
+            const viewerName = document.getElementById('viewer-name-input').value.trim();
+            if (viewerName.length === 0) {
+                alert("Please enter your name to view scores.");
+                return;
+            }
+            
+            // Set the current filter to the entered name
+            currentFilter = viewerName;
+            isAdmin = false;
+            
+            // Hide the user login prompt and show the dashboard
+            document.getElementById('user-login-section').style.display = 'none';
+            renderDashboard();
+        }
+
+        function checkAdminPassword() {
+            const inputPass = document.getElementById('admin-password').value;
+            if (inputPass === ADMIN_PASSWORD) {
+                isAdmin = true;
+                currentFilter = 'ALL';
+                
+                document.getElementById('admin-login').style.display = 'none';
+                document.getElementById('score-form').style.display = 'block';
+                document.getElementById('user-login-section').style.display = 'none';
+                document.getElementById('date-recorded').valueAsDate = new Date(); 
+                
+                renderDashboard(); 
+                alert('🔓 Admin Editor, Editing, and Deletion Unlocked! Showing all users.');
+            } else {
+                isAdmin = false;
+                alert('🚨 Incorrect password. Stay in viewer mode.');
+            }
+        }
+
+        document.getElementById('add-score-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            if (!isAdmin) {
+                alert("You must log in as Admin to submit a score.");
+                return;
+            }
+
+            const scores = loadScores();
+            const scoreObtained = parseInt(document.getElementById('score-obtained').value);
+            const totalQuestions = parseInt(document.getElementById('total-questions').value);
+
+            if (scoreObtained > totalQuestions) {
+                alert("Score cannot be higher than total questions!");
+                return;
+            }
+            
+            const newScorePercentage = (scoreObtained / totalQuestions) * 100;
+
+            const newScore = {
+                id: generateId(), 
+                person: document.getElementById('person').value,
+                dateRecorded: document.getElementById('date-recorded').value, 
+                subject: document.getElementById('subject').value,
+                moduleName: document.getElementById('module-name').value,
+                scoreObtained: scoreObtained,
+                totalQuestions: totalQuestions
+            };
+            
+            const tempScores = [...scores, newScore]; 
+            const percentile = calculatePercentile(newScorePercentage, tempScores);
+
+            scores.push(newScore);
+            saveScores(scores);
+
+            // Re-render, keeping filter as ALL
+            renderDashboard(); 
+            
+            const feedbackDiv = document.getElementById('submission-feedback');
+            feedbackDiv.innerHTML = `
+                ✅ Score submitted!
+                <br>Your score of **${newScorePercentage.toFixed(2)}%**
+                is in the **${percentile}** percentile of all recorded scores.
+            `;
+            feedbackDiv.style.display = 'block';
+
+            document.getElementById('score-obtained').value = '';
+            document.getElementById('total-questions').value = '';
+            document.getElementById('module-name').value = '';
+        });
+
+        // --- Initialization ---
+
+        window.onload = function() {
+            document.getElementById('date-recorded').valueAsDate = new Date();
+            // Initial load hides the dashboard. The user must log in (name or password) to view it.
+        }
+    </script>
+</body>
+</html>
