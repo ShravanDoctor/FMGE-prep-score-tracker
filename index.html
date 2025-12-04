@@ -120,8 +120,7 @@
 
     <script>
         const ADMIN_PASSWORD = "Shravan567@#$"; // <--- **CHANGE THIS PASSWORD**
-        // SheetDB URL using your provided ID. This is the link to your Google Sheet API.
-        const SHEETDB_URL = 'https://sheetdb.io/api/v1/1n6ctoq9fxr61'; 
+        const SHEETDB_URL = 'https://sheetdb.io/api/v1/1n6ctoq9fxr61'; // <--- ***PASTE YOUR SHEETDB URL HERE***
         let isAdmin = false; 
         let currentFilter = null; // null means no user has logged in yet
 
@@ -129,7 +128,6 @@
         // --- Utility Functions ---
 
         function generateId() {
-            // Generates a unique, URL-safe ID
             return Date.now().toString(36) + Math.random().toString(36).substr(2);
         }
 
@@ -171,6 +169,7 @@
                 return scores;
             } catch (error) {
                 console.error("Error loading scores:", error);
+                // Only show alert if the dashboard should be visible
                 if (currentFilter !== null) {
                     alert("Could not load scores from the shared database. Check internet connection and SheetDB URL.");
                 }
@@ -210,10 +209,7 @@
             const allScores = await loadScores();
             const scoreIndex = allScores.findIndex(s => s.id === scoreId);
             
-            if (scoreIndex === -1) {
-                console.error("Score ID not found in database for update.");
-                return;
-            }
+            if (scoreIndex === -1) return;
             
             const tempScore = {...allScores[scoreIndex]}; 
 
@@ -241,11 +237,9 @@
                  return;
             }
             
-            // CRITICAL FIX: CONSTRUCT THE SHEETDB PATCH URL
+            // SEND PATCH REQUEST TO CLOUD
             try {
-                // SheetDB uses the format: BASE_URL/COLUMN_NAME/VALUE_TO_FIND
                 const patchUrl = `${SHEETDB_URL}/id/${scoreId}`;
-                // We only send the field that was actually updated
                 const payload = { sheet1: { [field]: newValue } }; 
 
                 const response = await fetch(patchUrl, {
@@ -254,11 +248,7 @@
                     body: JSON.stringify(payload)
                 });
                 
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    console.error("SheetDB Error Response:", errorText);
-                    throw new Error('Cloud update failed. Check console for details.');
-                }
+                if (!response.ok) throw new Error('Cloud update failed.');
                 
                 renderDashboard();
                 document.getElementById('submission-feedback').style.display = 'none';
@@ -266,7 +256,7 @@
             } catch (error) {
                  alert(`Error updating score: ${error.message}`);
                  console.error(error);
-                 renderDashboard(); 
+                 renderDashboard();
             }
         }
 
@@ -302,6 +292,7 @@
                  document.getElementById('filter-container').style.display = 'block';
                  currentFilter = document.getElementById('person-filter').value;
             } else if (currentFilter === null) {
+                 // Should only happen on initial load before any login
                  document.getElementById('dashboard-section').style.display = 'none';
                  return;
             } else {
@@ -380,17 +371,19 @@
             });
 
             // --- Render Charts ---
-            renderWeeklyImprovement(scoresToDisplay);
+            renderImprovementCharts(scoresToDisplay);
         }
 
-        function renderWeeklyImprovement(scoresToChart) {
+        // --- Rendering Improvement Charts (Daily & Weekly) ---
+        
+        function renderImprovementCharts(scoresToChart) {
             const chartArea = document.getElementById('weekly-improvement-chart');
             chartArea.innerHTML = '';
             
             const people = [...new Set(scoresToChart.map(s => s.person))];
 
             if (people.length === 0) {
-                chartArea.innerHTML = '<p>No scores available for the selected user/group for weekly tracking.</p>';
+                chartArea.innerHTML = '<p>No scores available for the selected user/group for tracking.</p>';
                 return;
             }
 
@@ -399,18 +392,28 @@
                 
                 if (personScores.length === 0) return;
 
+                const dailyData = {};
                 const weeklyData = {};
 
                 personScores.forEach(score => {
                     const date = new Date(score.dateRecorded);
+                    const percentage = (score.scoreObtained / score.totalQuestions) * 100;
+
+                    // 1. Daily Aggregation
+                    const dateKey = score.dateRecorded; // YYYY-MM-DD is unique daily key
+                    if (!dailyData[dateKey]) {
+                        dailyData[dateKey] = { total: 0, count: 0 };
+                    }
+                    dailyData[dateKey].total += percentage;
+                    dailyData[dateKey].count++;
+
+                    // 2. Weekly Aggregation
                     const day = date.getDay(); 
                     const diff = date.getDate() - day + (day === 0 ? -6 : 1); 
                     const weekStart = new Date(date.setDate(diff));
                     weekStart.setHours(0, 0, 0, 0);
                     const weekKey = weekStart.toISOString().split('T')[0]; 
                     
-                    const percentage = (score.scoreObtained / score.totalQuestions) * 100;
-
                     if (!weeklyData[weekKey]) {
                         weeklyData[weekKey] = { total: 0, count: 0 };
                     }
@@ -418,16 +421,47 @@
                     weeklyData[weekKey].count++;
                 });
 
+                // Prepare Daily Averages
+                const dailyAverages = [];
+                for (const key in dailyData) {
+                    const avg = dailyData[key].total / dailyData[key].count;
+                    dailyAverages.push({ period: key, average: avg });
+                }
+                dailyAverages.sort((a, b) => new Date(a.period) - new Date(b.period));
+
+                // Prepare Weekly Averages
                 const weeklyAverages = [];
                 for (const key in weeklyData) {
                     const avg = weeklyData[key].total / weeklyData[key].count;
-                    weeklyAverages.push({ week: key, average: avg });
+                    weeklyAverages.push({ period: key, average: avg });
                 }
-
-                weeklyAverages.sort((a, b) => new Date(a.week) - new Date(b.week));
+                weeklyAverages.sort((a, b) => new Date(a.period) - new Date(b.period));
+                
                 
                 let chartHTML = `<div class="chart-container">`;
-                chartHTML += `<h4 class="chart-person-title">Progress for: ${person}</h4>`;
+                chartHTML += `<h3 class="chart-person-title">Progress Trends for: ${person}</h3>`;
+
+                // --- DAILY CHART GENERATION (Cleaned Up) ---
+                chartHTML += '<h4>☀️ Daily Score Trend</h4>';
+                chartHTML += '<p>Shows the average score for each specific day tests were taken.</p>';
+                chartHTML += '<ul>';
+
+                dailyAverages.forEach(data => {
+                    const avg = data.average.toFixed(2);
+                    const barWidth = Math.min(avg, 100); 
+                    chartHTML += `
+                        <li>
+                            <span class="chart-label">${data.period}</span>
+                            <div class="chart-bar" style="width: ${barWidth}%;">${avg}%</div>
+                        </li>`;
+                });
+                chartHTML += '</ul>';
+                
+                chartHTML += '<hr style="border: 0; height: 1px; background: #ddd; margin: 20px 0;">'; // Visual Separator
+
+                // --- WEEKLY CHART GENERATION (Cleaned Up) ---
+                chartHTML += '<h4>🗓️ Weekly Average Trend</h4>';
+                chartHTML += '<p>Shows the average score across all tests taken each week (Week starts on Monday).</p>';
                 chartHTML += '<ul>';
 
                 weeklyAverages.forEach(data => {
@@ -435,7 +469,7 @@
                     const barWidth = Math.min(avg, 100); 
                     chartHTML += `
                         <li>
-                            <span class="chart-label">${data.week}</span>
+                            <span class="chart-label">${data.period}</span>
                             <div class="chart-bar" style="width: ${barWidth}%;">${avg}%</div>
                         </li>`;
                 });
@@ -455,9 +489,11 @@
                 return;
             }
             
+            // Set the current filter to the entered name
             currentFilter = viewerName;
             isAdmin = false;
             
+            // Hide the user login prompt and show the dashboard
             document.getElementById('user-login-section').style.display = 'none';
             renderDashboard();
         }
@@ -554,6 +590,7 @@
 
         window.onload = function() {
             document.getElementById('date-recorded').valueAsDate = new Date();
+            // Dashboard remains hidden until user logs in (name or password)
         }
     </script>
 </body>
