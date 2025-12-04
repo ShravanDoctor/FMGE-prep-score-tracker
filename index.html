@@ -120,7 +120,8 @@
 
     <script>
         const ADMIN_PASSWORD = "Shravan567@#$"; // <--- **CHANGE THIS PASSWORD**
-        const SHEETDB_URL = 'https://sheetdb.io/api/v1/1n6ctoq9fxr61'; // <--- ***PASTE YOUR SHEETDB URL HERE***
+        // SheetDB URL using your provided ID. This is the link to your Google Sheet API.
+        const SHEETDB_URL = 'https://sheetdb.io/api/v1/1n6ctoq9fxr61'; 
         let isAdmin = false; 
         let currentFilter = null; // null means no user has logged in yet
 
@@ -128,6 +129,7 @@
         // --- Utility Functions ---
 
         function generateId() {
+            // Generates a unique, URL-safe ID
             return Date.now().toString(36) + Math.random().toString(36).substr(2);
         }
 
@@ -169,7 +171,6 @@
                 return scores;
             } catch (error) {
                 console.error("Error loading scores:", error);
-                // Only show alert if the dashboard should be visible
                 if (currentFilter !== null) {
                     alert("Could not load scores from the shared database. Check internet connection and SheetDB URL.");
                 }
@@ -209,7 +210,10 @@
             const allScores = await loadScores();
             const scoreIndex = allScores.findIndex(s => s.id === scoreId);
             
-            if (scoreIndex === -1) return;
+            if (scoreIndex === -1) {
+                console.error("Score ID not found in database for update.");
+                return;
+            }
             
             const tempScore = {...allScores[scoreIndex]}; 
 
@@ -237,9 +241,11 @@
                  return;
             }
             
-            // SEND PATCH REQUEST TO CLOUD
+            // CRITICAL FIX: CONSTRUCT THE SHEETDB PATCH URL
             try {
+                // SheetDB uses the format: BASE_URL/COLUMN_NAME/VALUE_TO_FIND
                 const patchUrl = `${SHEETDB_URL}/id/${scoreId}`;
+                // We only send the field that was actually updated
                 const payload = { sheet1: { [field]: newValue } }; 
 
                 const response = await fetch(patchUrl, {
@@ -248,7 +254,11 @@
                     body: JSON.stringify(payload)
                 });
                 
-                if (!response.ok) throw new Error('Cloud update failed.');
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error("SheetDB Error Response:", errorText);
+                    throw new Error('Cloud update failed. Check console for details.');
+                }
                 
                 renderDashboard();
                 document.getElementById('submission-feedback').style.display = 'none';
@@ -256,7 +266,7 @@
             } catch (error) {
                  alert(`Error updating score: ${error.message}`);
                  console.error(error);
-                 renderDashboard();
+                 renderDashboard(); 
             }
         }
 
@@ -292,7 +302,6 @@
                  document.getElementById('filter-container').style.display = 'block';
                  currentFilter = document.getElementById('person-filter').value;
             } else if (currentFilter === null) {
-                 // Should only happen on initial load before any login
                  document.getElementById('dashboard-section').style.display = 'none';
                  return;
             } else {
@@ -446,11 +455,9 @@
                 return;
             }
             
-            // Set the current filter to the entered name
             currentFilter = viewerName;
             isAdmin = false;
             
-            // Hide the user login prompt and show the dashboard
             document.getElementById('user-login-section').style.display = 'none';
             renderDashboard();
         }
@@ -547,7 +554,6 @@
 
         window.onload = function() {
             document.getElementById('date-recorded').valueAsDate = new Date();
-            // Dashboard remains hidden until user logs in (name or password)
         }
     </script>
 </body>
